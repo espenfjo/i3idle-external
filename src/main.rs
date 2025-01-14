@@ -32,13 +32,14 @@ pub struct WM {
     sway: bool,
 }
 
-fn get_outputs() -> Vec<Output> {
-    let mut connection = I3Connection::connect().expect("Failed to connect to I3/Sway IPC");
-
+fn get_outputs() -> Result<Vec<Output>, String> {
+    let mut connection =
+        I3Connection::connect().map_err(|e| format!("Failed to connect to I3/Sway IPC: {e}"))?;
     let outputs = connection
         .get_outputs()
-        .expect("Could not get display outputs");
-    outputs.outputs
+        .map_err(|e| format!("Could not get display outputs: {e}"))?;
+
+    Ok(outputs.outputs)
 }
 fn main() {
     pretty_env_logger::init();
@@ -50,8 +51,8 @@ fn main() {
 
     let idle_images = Arc::new(Mutex::new(Vec::new()));
     let temp_files: Arc<Mutex<Vec<NamedTempFile>>> = Arc::new(Mutex::new(Vec::new()));
-
-    get_outputs().par_iter().for_each(|output| {
+    let outputs = get_outputs().expect("Failed to get outputs");
+    outputs.par_iter().for_each(|output| {
         let x_min = output.rect.0;
         let y_min = output.rect.1;
         let x_max = output.rect.2;
