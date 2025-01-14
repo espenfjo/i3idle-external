@@ -1,0 +1,2 @@
+external_command = "corrupter -mag 3 -boffset 10 $IN $OUT"
+lock_args="-F -f -e -l"

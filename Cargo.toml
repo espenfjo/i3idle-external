@@ -1,0 +1,13 @@
+[package]
+name = "i3idle-external"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.26", features = ["derive"] }
+config = "0.15.5"
+i3ipc-jl = { version = "0.11.2", features = ["sway-1-1"] }
+log = "0.4.25"
+pretty_env_logger = "0.5.0"
+rayon = "1.10.0"
+tempfile = "3.15.0"
