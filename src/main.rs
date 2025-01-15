@@ -15,22 +15,9 @@ use tempfile::NamedTempFile;
 
 #[derive(Parser)]
 struct Cli {
-    #[clap(flatten)]
-    wm: WM,
     /// Configuration file
     #[arg(short, long)]
     config: String,
-}
-
-#[derive(Debug, clap::Args)]
-#[group(required = true, multiple = false)]
-pub struct WM {
-    /// Uses i3lock and i3 features
-    #[clap(short, long)]
-    i3: bool,
-    /// Uses swaylock and sway features
-    #[clap(short, long)]
-    sway: bool,
 }
 
 fn get_outputs() -> Result<Vec<Output>, String> {
@@ -126,26 +113,19 @@ fn main() {
     let args = settings.get::<String>("lock_args").unwrap();
     let arg_parts = args.split_whitespace();
 
-    let mut command = if cli.wm.sway {
-        let mut command = Command::new("swaylock");
-        command.args(arg_parts);
-        for image in idle_images.lock().unwrap().iter() {
-            command.arg("-i").arg(image);
-        }
-        command
-    } else {
-        let mut command = Command::new("i3lock");
-        command.args(arg_parts);
-        for image in idle_images.lock().unwrap().iter() {
-            command.arg("-i").arg(image);
-        }
-        command
-    };
+    let mut command = Command::new("swaylock");
+    command.args(arg_parts);
+
+    for image in idle_images.lock().unwrap().iter() {
+        command.arg("-i").arg(image);
+    }
+
     debug!("Running: {:?}", command);
-    let output = command.output().expect("Couldnt run lock program");
+
+    let output = command.output().expect("Couldnt run swaylock");
     if !output.status.success() {
         panic!(
-            "Lock program error: {}",
+            "swaylock error: {}",
             String::from_utf8_lossy(&output.stderr)
         )
     }
