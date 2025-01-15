@@ -1,6 +1,7 @@
 use std::process::Command;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Instant;
 
 use clap::Parser;
 use config::Config;
@@ -41,6 +42,60 @@ fn get_outputs() -> Result<Vec<Output>, String> {
 
     Ok(outputs.outputs)
 }
+
+fn run_grim(output: &Output, temp: &NamedTempFile) {
+    let x_min = output.rect.0;
+    let y_min = output.rect.1;
+    let x_max = output.rect.2;
+    let y_max = output.rect.3;
+
+    let start = Instant::now();
+    let grim_output = Command::new("grim")
+        .arg("-l")
+        .arg("0")
+        .arg("-g")
+        .arg(format!("{},{} {}x{}", x_min, y_min, x_max, y_max))
+        .arg(temp.path())
+        .output()
+        .expect("Spawning grim failed");
+    let end = Instant::now();
+    debug!("Grim took: {:#?}", end - start);
+
+    if !grim_output.status.success() {
+        panic!(
+            "Error running grim: {}",
+            String::from_utf8(grim_output.stderr).expect("Couldnt read grim output")
+        );
+    }
+}
+fn run_modifier(settings: &Config, temp: &NamedTempFile) {
+    let mut modify_program: String = settings
+        .get("external_command")
+        .expect("Couldnt read 'external_command' setting from the config file");
+
+    modify_program = modify_program
+        .replace("$IN", temp.path().to_str().unwrap())
+        .replace("$OUT", temp.path().to_str().unwrap());
+
+    let mut modified = modify_program.split_whitespace();
+
+    let start = Instant::now();
+    let mod_output = Command::new(modified.next().expect("Expected program"))
+        .args(modified)
+        .output()
+        .expect("Couldnt run modifier program");
+    let end = Instant::now();
+
+    debug!("Modifier took: {:#?}", end - start);
+
+    if !mod_output.status.success() {
+        panic!(
+            "Couldnt run modifier program: {}",
+            String::from_utf8_lossy(&mod_output.stderr)
+        )
+    }
+}
+
 fn main() {
     pretty_env_logger::init();
     let cli = Cli::parse();
@@ -52,44 +107,14 @@ fn main() {
     let idle_images = Arc::new(Mutex::new(Vec::new()));
     let temp_files: Arc<Mutex<Vec<NamedTempFile>>> = Arc::new(Mutex::new(Vec::new()));
     let outputs = get_outputs().expect("Failed to get outputs");
+
     outputs.par_iter().for_each(|output| {
-        let x_min = output.rect.0;
-        let y_min = output.rect.1;
-        let x_max = output.rect.2;
-        let y_max = output.rect.3;
         let temp = NamedTempFile::new().unwrap();
-        debug!("{}: {},{} {}x{}", output.name, x_min, y_min, x_max, y_max);
-        let grim_output = Command::new("grim")
-            .arg("-g")
-            .arg(format!("{},{} {}x{}", x_min, y_min, x_max, y_max))
-            .arg(temp.path())
-            .output()
-            .expect("Spawning grim failed");
-        if !grim_output.status.success() {
-            panic!(
-                "Error running grim: {}",
-                String::from_utf8(grim_output.stderr).expect("Couldnt read grim output")
-            );
-        }
-        let mut modify_program: String = settings
-            .get("external_command")
-            .expect("Couldnt read 'external_command' setting from the config file");
 
-        modify_program = modify_program
-            .replace("$IN", temp.path().to_str().unwrap())
-            .replace("$OUT", temp.path().to_str().unwrap());
+        run_grim(output, &temp);
 
-        let mut modified = modify_program.split_whitespace();
-        let mod_output = Command::new(modified.next().expect("Expected program"))
-            .args(modified)
-            .output()
-            .expect("Couldnt run modifier program");
-        if !mod_output.status.success() {
-            panic!(
-                "Couldnt run modifier program: {}",
-                String::from_utf8_lossy(&mod_output.stderr)
-            )
-        }
+        run_modifier(&settings, &temp);
+
         idle_images.lock().unwrap().push(format!(
             "{}:{}",
             output.name,
